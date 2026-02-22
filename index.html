@@ -241,11 +241,12 @@
             { dx: -40, dy: -35 }   // 5: top-left
         ];
 
+        // Состояние: два массива треугольников (каждый содержит цвет и номер)
         const state = {
             moveCount: 0,
             isFlipping: false,
-            frontColors: [],
-            backColors: []
+            frontTriangles: [], // 6 объектов { color, number }
+            backTriangles: []
         };
 
         const FLIP_DIRECTIONS = [
@@ -287,8 +288,8 @@
             return vertices;
         }
 
-        // Рисует грань: isFront=true -> цифры 1..6 по часовой, иначе 6..1
-        function drawFace(faceElement, colors, isFront) {
+        // Рисует грань на основе массива треугольников
+        function drawFace(faceElement, triangles) {
             faceElement.innerHTML = '';
 
             const canvas = document.createElement('canvas');
@@ -303,7 +304,9 @@
             const vertices = getHexVertices(centerX, centerY, radius);
 
             for (let i = 0; i < 6; i++) {
-                const color = colors[i];
+                const triangle = triangles[i];
+                const color = triangle.color;
+                const number = triangle.number;
                 const v1 = vertices[i];
                 const v2 = vertices[(i + 1) % 6];
 
@@ -326,8 +329,6 @@
                 ctx.lineWidth = 3;
                 ctx.stroke();
 
-                // Номер сектора
-                const number = isFront ? i + 1 : 6 - i;
                 const textX = centerX + (midX - centerX) * 0.6;
                 const textY = centerY + (midY - centerY) * 0.6;
 
@@ -363,8 +364,8 @@
         }
 
         function updateFaces() {
-            drawFace(document.getElementById('frontFace'), state.frontColors, true);
-            drawFace(document.getElementById('backFace'), state.backColors, false);
+            drawFace(document.getElementById('frontFace'), state.frontTriangles);
+            drawFace(document.getElementById('backFace'), state.backTriangles);
         }
 
         function getEdgeOffset(directionIndex) {
@@ -437,9 +438,12 @@
                     backFace.classList.add('front');
                     backFace.id = 'frontFace';
 
-                    // Ключевое изменение: обмениваем цвета с разворотом,
-                    // чтобы компенсировать зеркальность цифр и сохранить привязку к треугольникам
-                    [state.frontColors, state.backColors] = [state.backColors.slice().reverse(), state.frontColors.slice().reverse()];
+                    // Обмениваем треугольники с разворотом, чтобы симулировать переворот
+                    // Разворот нужен, потому что обратная сторона отображается зеркально
+                    [state.frontTriangles, state.backTriangles] = [
+                        state.backTriangles.slice().reverse(),
+                        state.frontTriangles.slice().reverse()
+                    ];
 
                     // Перерисовываем грани
                     updateFaces();
@@ -555,11 +559,25 @@
         }
 
         function init() {
-            state.frontColors = Array.from({ length: 6 }, () => randomColor());
-            state.backColors = Array.from({ length: 6 }, () => randomColor());
+            // Создаём треугольники для лицевой стороны с номерами 1..6
+            state.frontTriangles = [];
+            for (let i = 0; i < 6; i++) {
+                state.frontTriangles.push({
+                    color: randomColor(),
+                    number: i + 1
+                });
+            }
+            // Для тыльной стороны тоже номера 1..6, но они будут видны только после переворота
+            state.backTriangles = [];
+            for (let i = 0; i < 6; i++) {
+                state.backTriangles.push({
+                    color: randomColor(),
+                    number: i + 1
+                });
+            }
 
-            drawFace(document.getElementById('frontFace'), state.frontColors, true);
-            drawFace(document.getElementById('backFace'), state.backColors, false);
+            drawFace(document.getElementById('frontFace'), state.frontTriangles);
+            drawFace(document.getElementById('backFace'), state.backTriangles);
 
             // Устанавливаем начальную позицию
             updateTileTransform();
