@@ -66,7 +66,7 @@
             height: 230px;
             transform-style: preserve-3d;
             transform: rotateX(55deg) scale(0.8);
-            transition: transform 0s; /* без перехода, обновляем сразу после анимации */
+            transition: transform 0s;
         }
 
         .tile-pivot {
@@ -437,8 +437,9 @@
                     backFace.classList.add('front');
                     backFace.id = 'frontFace';
 
-                    // Меняем цвета местами (без генерации новых)
-                    [state.frontColors, state.backColors] = [state.backColors, state.frontColors];
+                    // Ключевое изменение: обмениваем цвета с разворотом,
+                    // чтобы компенсировать зеркальность цифр и сохранить привязку к треугольникам
+                    [state.frontColors, state.backColors] = [state.backColors.slice().reverse(), state.frontColors.slice().reverse()];
 
                     // Перерисовываем грани
                     updateFaces();
