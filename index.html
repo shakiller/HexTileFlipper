@@ -272,7 +272,8 @@
             return vertices;
         }
 
-        function drawFace(faceElement, colors) {
+        // Рисует грань с заданными цветами. Если isFront = true, то цифры 1..6, иначе 6..1
+        function drawFace(faceElement, colors, isFront) {
             faceElement.innerHTML = '';
 
             const canvas = document.createElement('canvas');
@@ -310,6 +311,8 @@
                 ctx.lineWidth = 3;
                 ctx.stroke();
 
+                // Номер сектора: для передней стороны 1..6, для задней 6..1
+                const number = isFront ? i + 1 : 6 - i;
                 const textX = centerX + (midX - centerX) * 0.6;
                 const textY = centerY + (midY - centerY) * 0.6;
 
@@ -319,7 +322,7 @@
                 ctx.shadowColor = '#000';
                 ctx.shadowBlur = 8;
                 ctx.fillStyle = 'white';
-                ctx.fillText(i + 1, textX, textY);
+                ctx.fillText(number, textX, textY);
                 ctx.shadowBlur = 0;
             }
 
@@ -345,8 +348,8 @@
         }
 
         function updateFaces() {
-            drawFace(document.getElementById('frontFace'), state.frontColors);
-            drawFace(document.getElementById('backFace'), state.backColors);
+            drawFace(document.getElementById('frontFace'), state.frontColors, true);
+            drawFace(document.getElementById('backFace'), state.backColors, false);
         }
 
         function getEdgeOffset(directionIndex) {
@@ -411,9 +414,10 @@
                     backFace.classList.add('front');
                     backFace.id = 'frontFace';
 
-                    // Просто меняем цвета местами, без генерации новых
+                    // Меняем цвета местами
                     [state.frontColors, state.backColors] = [state.backColors, state.frontColors];
 
+                    // Перерисовываем грани с новыми цветами и правильными номерами
                     updateFaces();
 
                     pivot.style.transform = '';
@@ -521,8 +525,9 @@
             state.frontColors = Array.from({ length: 6 }, () => randomColor());
             state.backColors = Array.from({ length: 6 }, () => randomColor());
 
-            drawFace(document.getElementById('frontFace'), state.frontColors);
-            drawFace(document.getElementById('backFace'), state.backColors);
+            // Рисуем начальные грани
+            drawFace(document.getElementById('frontFace'), state.frontColors, true);
+            drawFace(document.getElementById('backFace'), state.backColors, false);
 
             document.querySelectorAll('.direction-arrow').forEach(arrow => {
                 arrow.addEventListener('click', (e) => {
