@@ -124,6 +124,9 @@
             opacity: 0.4;
             transition: all 0.3s ease;
             animation: pulse 2s ease-in-out infinite;
+            cursor: pointer;
+            pointer-events: auto; /* чтобы стрелки были кликабельны */
+            z-index: 10;
         }
 
         .direction-arrow.active {
@@ -189,13 +192,13 @@
     <h1>HEXAGONAL FLIP</h1>
 
     <div class="scene" id="scene">
-        <div class="direction-indicators">
-            <span class="direction-arrow">↗</span>
-            <span class="direction-arrow">→</span>
-            <span class="direction-arrow">↘</span>
-            <span class="direction-arrow">↙</span>
-            <span class="direction-arrow">←</span>
-            <span class="direction-arrow">↖</span>
+        <div class="direction-indicators" id="directionIndicators">
+            <span class="direction-arrow" data-dir="0">↗</span>
+            <span class="direction-arrow" data-dir="1">→</span>
+            <span class="direction-arrow" data-dir="2">↘</span>
+            <span class="direction-arrow" data-dir="3">↙</span>
+            <span class="direction-arrow" data-dir="4">←</span>
+            <span class="direction-arrow" data-dir="5">↖</span>
         </div>
 
         <div class="tile-container" id="tileContainer">
@@ -209,7 +212,7 @@
     </div>
 
     <div class="info">
-        Свайпни в любую из 6 сторон
+        Свайпни или кликни на стрелку
         <div class="moves-counter">Переворотов: <span id="moveCount">0</span></div>
     </div>
 
@@ -230,18 +233,19 @@
         const state = {
             moveCount: 0,
             isFlipping: false,
-            frontColors: [], // цвета для лицевой стороны
-            backColors: []   // цвета для тыльной стороны
+            frontColors: [],
+            backColors: []
         };
 
-        // Исправленные направления: углы осей вращения (вектора вдоль ребра)
+        // Исправленные углы осей вращения (вдоль ребра)
+        // Индексы: 0 - topRight, 1 - right, 2 - bottomRight, 3 - bottomLeft, 4 - left, 5 - topLeft
         const FLIP_DIRECTIONS = [
-            { name: 'topRight', edgeAngle: -30 },   // index 0: свайп вверх-вправо
-            { name: 'right', edgeAngle: -90 },      // index 1: вправо
-            { name: 'bottomRight', edgeAngle: -150 },// index 2: вниз-вправо
-            { name: 'bottomLeft', edgeAngle: 150 },  // index 3: вниз-влево
-            { name: 'left', edgeAngle: 90 },         // index 4: влево
-            { name: 'topLeft', edgeAngle: 30 }       // index 5: вверх-влево
+            { name: 'topRight', edgeAngle: 30 },      // ось под 30°
+            { name: 'right', edgeAngle: 90 },          // ось под 90°
+            { name: 'bottomRight', edgeAngle: 150 },   // ось под 150°
+            { name: 'bottomLeft', edgeAngle: -150 },   // ось под -150° (или 210°)
+            { name: 'left', edgeAngle: -90 },          // ось под -90° (или 270°)
+            { name: 'topLeft', edgeAngle: -30 }        // ось под -30° (или 330°)
         ];
 
         // Генератор случайного яркого цвета
@@ -268,7 +272,7 @@
         function getHexVertices(centerX, centerY, radius) {
             const vertices = [];
             for (let i = 0; i < 6; i++) {
-                const angle = (i * 60 - 90) * Math.PI / 180; // начиная с верхней вершины
+                const angle = (i * 60 - 90) * Math.PI / 180; // начинаем с верхней вершины
                 vertices.push({
                     x: centerX + radius * Math.cos(angle),
                     y: centerY + radius * Math.sin(angle)
@@ -277,9 +281,9 @@
             return vertices;
         }
 
-        // Отрисовка грани с заданными цветами шести секторов
+        // Отрисовка грани с цветами и номерами секторов
         function drawFace(faceElement, colors) {
-            faceElement.innerHTML = ''; // очищаем предыдущий canvas
+            faceElement.innerHTML = '';
 
             const canvas = document.createElement('canvas');
             canvas.width = 400;
@@ -317,6 +321,19 @@
                 ctx.strokeStyle = 'rgba(255,255,255,0.3)';
                 ctx.lineWidth = 3;
                 ctx.stroke();
+
+                // Рисуем номер сектора (i+1) в центре сектора
+                const textX = centerX + (midX - centerX) * 0.6;
+                const textY = centerY + (midY - centerY) * 0.6;
+
+                ctx.font = 'bold 28px "Orbitron", sans-serif';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.shadowColor = '#000';
+                ctx.shadowBlur = 8;
+                ctx.fillStyle = 'white';
+                ctx.fillText(i + 1, textX, textY);
+                ctx.shadowBlur = 0; // сброс тени для остальных элементов
             }
 
             // Контур шестиугольника
@@ -342,7 +359,7 @@
             faceElement.appendChild(canvas);
         }
 
-        // Обновить обе грани в соответствии с текущими цветами
+        // Обновить обе грани
         function updateFaces() {
             drawFace(document.getElementById('frontFace'), state.frontColors);
             drawFace(document.getElementById('backFace'), state.backColors);
@@ -350,12 +367,12 @@
 
         // Вычислить смещение точки поворота к ребру
         function getEdgeOffset(directionIndex) {
-            // Угол направления от центра к ребру
-            const swipeAngle = (directionIndex * 60 - 60) * Math.PI / 180;
+            // Угол от центра к середине ребра (для смещения pivot)
+            const angleToEdge = (directionIndex * 60 - 60) * Math.PI / 180;
             const edgeDistance = TILE_HEIGHT / 2 * 0.8;
             return {
-                x: Math.cos(swipeAngle) * edgeDistance,
-                y: Math.sin(swipeAngle) * edgeDistance
+                x: Math.cos(angleToEdge) * edgeDistance,
+                y: Math.sin(angleToEdge) * edgeDistance
             };
         }
 
@@ -373,7 +390,7 @@
 
             const edge = getEdgeOffset(directionIndex);
 
-            // Ось вращения (вектор вдоль ребра)
+            // Ось вращения (вдоль ребра)
             const edgeAxisAngle = direction.edgeAngle * Math.PI / 180;
             const axisX = Math.cos(edgeAxisAngle);
             const axisY = Math.sin(edgeAxisAngle);
@@ -404,7 +421,7 @@
                     state.moveCount++;
                     document.getElementById('moveCount').textContent = state.moveCount;
 
-                    // Меняем местами лицевую и тыльную стороны (через классы и id)
+                    // Меняем местами лицевую и тыльную стороны
                     const frontFace = document.getElementById('frontFace');
                     const backFace = document.getElementById('backFace');
 
@@ -416,21 +433,18 @@
                     backFace.classList.add('front');
                     backFace.id = 'frontFace';
 
-                    // Обновляем цвета: бывшая лицевая (теперь тыльная) получает новые цвета,
-                    // а бывшая тыльная (теперь лицевая) сохраняет старые цвета.
-                    // Для этого меняем местами массивы и генерируем новые для новой тыльной.
+                    // Обновляем цвета: новая тыльная сторона получает новые цвета
                     const newBackColors = Array.from({ length: 6 }, () => randomColor());
-                    // Меняем ссылки: frontColors теперь указывает на старые backColors, а backColors на новые
                     [state.frontColors, state.backColors] = [state.backColors, newBackColors];
 
-                    // Перерисовываем обе грани с новыми массивами
+                    // Перерисовываем грани
                     updateFaces();
 
                     // Сбрасываем трансформацию
                     pivot.style.transform = '';
                     hexTile.classList.remove('flipping');
 
-                    createParticles(); // эффект частиц
+                    createParticles();
 
                     state.isFlipping = false;
                 }
@@ -439,7 +453,7 @@
             requestAnimationFrame(animate);
         }
 
-        // Эффект частиц при перевороте
+        // Эффект частиц
         function createParticles() {
             const container = document.getElementById('particles');
             const rect = document.getElementById('scene').getBoundingClientRect();
@@ -467,9 +481,6 @@
             const angle = Math.atan2(dy, dx) * 180 / Math.PI;
             const normalizedAngle = ((angle + 360) % 360);
 
-            // Индексы направлений:
-            // 0: top-right (270-330), 1: right (330-30), 2: bottom-right (30-90),
-            // 3: bottom-left (90-150), 4: left (150-210), 5: top-left (210-270)
             if (normalizedAngle >= 330 || normalizedAngle < 30) return 1;   // right
             if (normalizedAngle >= 30 && normalizedAngle < 90) return 2;    // bottom-right
             if (normalizedAngle >= 90 && normalizedAngle < 150) return 3;   // bottom-left
@@ -542,13 +553,22 @@
 
         // Инициализация
         function init() {
-            // Генерируем начальные цвета для обеих сторон (разные)
+            // Генерируем начальные цвета
             state.frontColors = Array.from({ length: 6 }, () => randomColor());
             state.backColors = Array.from({ length: 6 }, () => randomColor());
 
             // Рисуем грани
             drawFace(document.getElementById('frontFace'), state.frontColors);
             drawFace(document.getElementById('backFace'), state.backColors);
+
+            // Клики на стрелки
+            document.querySelectorAll('.direction-arrow').forEach(arrow => {
+                arrow.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const dir = parseInt(arrow.getAttribute('data-dir'), 10);
+                    flipTile(dir);
+                });
+            });
 
             const scene = document.getElementById('scene');
 
