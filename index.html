@@ -250,10 +250,10 @@
                 });
             }
 
-            const state = {
-                moveCount: 0,
-                isFlipping: false
-            };
+            let moveCount = 0;
+            let isFlipping = false;
+            // Флаг: true, если лицевая сторона показывает треугольники в обратном порядке
+            let frontReverse = false;
 
             const FLIP_DIRECTIONS = [
                 { name: 'topRight', edgeAngle: 30 },
@@ -287,28 +287,22 @@
                 return vertices;
             }
 
-            // Рисует грань. Если reverse = true, треугольники рисуются в обратном порядке (для обратной стороны)
+            // Рисует грань. Если reverse = true, треугольники рисуются в обратном порядке.
             function drawFace(faceElement, reverse) {
                 faceElement.innerHTML = '';
 
                 const canvas = document.createElement('canvas');
                 canvas.width = 400;
                 canvas.height = 460;
-
                 const ctx = canvas.getContext('2d');
-                const centerX = 200;
-                const centerY = 230;
-                const radius = 190;
-
+                const centerX = 200, centerY = 230, radius = 190;
                 const vertices = getHexVertices(centerX, centerY, radius);
 
-                // Определяем порядок треугольников
+                // Определяем порядок отрисовки треугольников (индексы 0..5)
                 const order = reverse ? [5,4,3,2,1,0] : [0,1,2,3,4,5];
 
                 for (let i = 0; i < 6; i++) {
                     const tri = triangles[order[i]];
-                    const color = tri.color;
-                    const number = tri.number;
                     const v1 = vertices[i];
                     const v2 = vertices[(i + 1) % 6];
 
@@ -321,41 +315,39 @@
                     const midX = (v1.x + v2.x) / 2;
                     const midY = (v1.y + v2.y) / 2;
                     const gradient = ctx.createLinearGradient(centerX, centerY, midX, midY);
-                    gradient.addColorStop(0, darkenColor(color, 15));
-                    gradient.addColorStop(1, color);
+                    gradient.addColorStop(0, darkenColor(tri.color, 15));
+                    gradient.addColorStop(1, tri.color);
 
                     ctx.fillStyle = gradient;
                     ctx.fill();
-
                     ctx.strokeStyle = 'rgba(255,255,255,0.3)';
                     ctx.lineWidth = 3;
                     ctx.stroke();
 
                     const textX = centerX + (midX - centerX) * 0.6;
                     const textY = centerY + (midY - centerY) * 0.6;
-
                     ctx.font = 'bold 28px "Orbitron", sans-serif';
                     ctx.textAlign = 'center';
                     ctx.textBaseline = 'middle';
                     ctx.shadowColor = '#000';
                     ctx.shadowBlur = 8;
                     ctx.fillStyle = 'white';
-                    ctx.fillText(number, textX, textY);
+                    ctx.fillText(tri.number, textX, textY);
                     ctx.shadowBlur = 0;
                 }
 
+                // Контур
                 ctx.beginPath();
                 ctx.moveTo(vertices[0].x, vertices[0].y);
-                for (let i = 1; i < 6; i++) {
-                    ctx.lineTo(vertices[i].x, vertices[i].y);
-                }
+                for (let i = 1; i < 6; i++) ctx.lineTo(vertices[i].x, vertices[i].y);
                 ctx.closePath();
                 ctx.strokeStyle = 'rgba(255,255,255,0.6)';
                 ctx.lineWidth = 5;
                 ctx.stroke();
 
+                // Центр
                 ctx.beginPath();
-                ctx.arc(centerX, centerY, 15, 0, Math.PI * 2);
+                ctx.arc(centerX, centerY, 15, 0, 2*Math.PI);
                 const centerGrad = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, 15);
                 centerGrad.addColorStop(0, 'rgba(255,255,255,0.7)');
                 centerGrad.addColorStop(1, 'rgba(255,255,255,0.2)');
@@ -365,17 +357,14 @@
                 faceElement.appendChild(canvas);
             }
 
-            // Начальная отрисовка
+            // Начальная отрисовка: лицевая сторона с reverse=false, обратная с reverse=true
             drawFace(document.getElementById('frontFace'), false);
             drawFace(document.getElementById('backFace'), true);
 
             function getEdgeOffset(directionIndex) {
                 const angleToEdge = (directionIndex * 60 - 60) * Math.PI / 180;
                 const edgeDistance = TILE_HEIGHT / 2 * 0.8;
-                return {
-                    x: Math.cos(angleToEdge) * edgeDistance,
-                    y: Math.sin(angleToEdge) * edgeDistance
-                };
+                return { x: Math.cos(angleToEdge) * edgeDistance, y: Math.sin(angleToEdge) * edgeDistance };
             }
 
             function updateTileTransform() {
@@ -384,18 +373,16 @@
             }
 
             function flipTile(directionIndex) {
-                if (state.isFlipping) return;
+                if (isFlipping) return;
 
                 const direction = FLIP_DIRECTIONS[directionIndex];
-                state.isFlipping = true;
+                isFlipping = true;
 
                 const pivot = document.getElementById('tilePivot');
                 const hexTile = document.getElementById('hexTile');
-
                 hexTile.classList.add('flipping');
 
                 const edge = getEdgeOffset(directionIndex);
-
                 const edgeAxisAngle = direction.edgeAngle * Math.PI / 180;
                 const axisX = Math.cos(edgeAxisAngle);
                 const axisY = Math.sin(edgeAxisAngle);
@@ -406,11 +393,7 @@
                 function animate(timestamp) {
                     if (!startTime) startTime = timestamp;
                     const progress = Math.min((timestamp - startTime) / duration, 1);
-
-                    const eased = progress < 0.5
-                        ? 2 * progress * progress
-                        : 1 - Math.pow(-2 * progress + 2, 2) / 2;
-
+                    const eased = progress < 0.5 ? 2 * progress * progress : 1 - Math.pow(-2 * progress + 2, 2) / 2;
                     const rotationDeg = eased * 180;
 
                     pivot.style.transform = `
@@ -422,8 +405,8 @@
                     if (progress < 1) {
                         requestAnimationFrame(animate);
                     } else {
-                        state.moveCount++;
-                        document.getElementById('moveCount').textContent = state.moveCount;
+                        moveCount++;
+                        document.getElementById('moveCount').textContent = moveCount;
 
                         // Меняем стороны местами
                         const frontFace = document.getElementById('frontFace');
@@ -437,13 +420,15 @@
                         backFace.classList.add('front');
                         backFace.id = 'frontFace';
 
-                        // Перерисовываем грани с новыми флагами reverse
-                        // Теперь та, что стала front (бывшая back), должна рисоваться с reverse=true
-                        // А та, что стала back (бывшая front), с reverse=false
-                        drawFace(document.getElementById('frontFace'), true);
-                        drawFace(document.getElementById('backFace'), false);
+                        // Инвертируем флаг для новой лицевой стороны
+                        frontReverse = !frontReverse;
 
-                        // Обновляем позицию тайла
+                        // Перерисовываем грани: новая передняя рисуется с текущим frontReverse,
+                        // новая задняя — с противоположным
+                        drawFace(document.getElementById('frontFace'), frontReverse);
+                        drawFace(document.getElementById('backFace'), !frontReverse);
+
+                        // Смещаем тайл
                         const offset = DIRECTION_OFFSETS[directionIndex];
                         tileX += offset.dx;
                         tileY += offset.dy;
@@ -453,8 +438,7 @@
                         hexTile.classList.remove('flipping');
 
                         createParticles();
-
-                        state.isFlipping = false;
+                        isFlipping = false;
                     }
                 }
 
@@ -474,77 +458,67 @@
                     particle.style.top = `${centerY + (Math.random() - 0.5) * 150}px`;
                     particle.style.animation = `float ${2 + Math.random() * 2}s ease-out forwards`;
                     particle.style.animationDelay = `${Math.random() * 0.2}s`;
-
                     container.appendChild(particle);
                     setTimeout(() => particle.remove(), 4000);
                 }
             }
 
             // Обработка свайпов
-            let touchStart = { x: 0, y: 0 };
+            let touchStart = { x:0, y:0 };
             let isSwiping = false;
 
             function getSwipeDirection(dx, dy) {
                 const angle = Math.atan2(dy, dx) * 180 / Math.PI;
-                const normalizedAngle = ((angle + 360) % 360);
-
-                if (normalizedAngle >= 330 || normalizedAngle < 30) return 1;
-                if (normalizedAngle >= 30 && normalizedAngle < 90) return 2;
-                if (normalizedAngle >= 90 && normalizedAngle < 150) return 3;
-                if (normalizedAngle >= 150 && normalizedAngle < 210) return 4;
-                if (normalizedAngle >= 210 && normalizedAngle < 270) return 5;
+                const a = (angle + 360) % 360;
+                if (a >= 330 || a < 30) return 1;
+                if (a >= 30 && a < 90) return 2;
+                if (a >= 90 && a < 150) return 3;
+                if (a >= 150 && a < 210) return 4;
+                if (a >= 210 && a < 270) return 5;
                 return 0;
             }
 
             function handleSwipeStart(e) {
-                if (state.isFlipping) return;
-                const point = e.touches ? e.touches[0] : e;
-                touchStart = { x: point.clientX, y: point.clientY };
+                if (isFlipping) return;
+                const p = e.touches ? e.touches[0] : e;
+                touchStart = { x: p.clientX, y: p.clientY };
                 isSwiping = true;
             }
 
             function handleSwipeMove(e) {
-                if (!isSwiping || state.isFlipping) return;
-
-                const point = e.touches ? e.touches[0] : e;
-                const dx = point.clientX - touchStart.x;
-                const dy = point.clientY - touchStart.y;
-                const distance = Math.sqrt(dx * dx + dy * dy);
-
-                const arrows = document.querySelectorAll('.direction-arrow');
-                arrows.forEach(arrow => arrow.classList.remove('active'));
-
-                if (distance > 20) {
+                if (!isSwiping || isFlipping) return;
+                const p = e.touches ? e.touches[0] : e;
+                const dx = p.clientX - touchStart.x;
+                const dy = p.clientY - touchStart.y;
+                const dist = Math.sqrt(dx*dx + dy*dy);
+                document.querySelectorAll('.direction-arrow').forEach(a => a.classList.remove('active'));
+                if (dist > 20) {
                     const dir = getSwipeDirection(dx, dy);
-                    arrows[dir].classList.add('active');
+                    document.querySelectorAll('.direction-arrow')[dir].classList.add('active');
                 }
             }
 
             function handleSwipeEnd(e) {
-                if (!isSwiping || state.isFlipping) return;
+                if (!isSwiping || isFlipping) return;
                 isSwiping = false;
-
-                const point = e.changedTouches ? e.changedTouches[0] : e;
-                const dx = point.clientX - touchStart.x;
-                const dy = point.clientY - touchStart.y;
-                const distance = Math.sqrt(dx * dx + dy * dy);
-
+                const p = e.changedTouches ? e.changedTouches[0] : e;
+                const dx = p.clientX - touchStart.x;
+                const dy = p.clientY - touchStart.y;
+                const dist = Math.sqrt(dx*dx + dy*dy);
                 document.querySelectorAll('.direction-arrow').forEach(a => a.classList.remove('active'));
-
-                if (distance > 40) {
-                    const direction = getSwipeDirection(dx, dy);
-                    flipTile(direction);
+                if (dist > 40) {
+                    const dir = getSwipeDirection(dx, dy);
+                    flipTile(dir);
                 }
             }
 
+            // Клавиатурная поддержка
             function handleKeydown(e) {
-                if (state.isFlipping) return;
-
+                if (isFlipping) return;
                 const keyMap = {
-                    'KeyE': 0, 'KeyD': 1, 'KeyC': 2, 'KeyZ': 3, 'KeyA': 4, 'KeyQ': 5,
-                    'ArrowRight': 1, 'ArrowLeft': 4
+                    'KeyE':0, 'KeyD':1, 'KeyC':2, 'KeyZ':3, 'KeyA':4, 'KeyQ':5,
+                    'ArrowRight':1, 'ArrowLeft':4
                 };
-
                 if (keyMap.hasOwnProperty(e.code)) {
                     e.preventDefault();
                     flipTile(keyMap[e.code]);
@@ -553,12 +527,10 @@
 
             function init() {
                 updateTileTransform();
-
                 document.querySelectorAll('.direction-arrow').forEach(arrow => {
                     arrow.addEventListener('click', (e) => {
                         e.stopPropagation();
-                        const dir = parseInt(arrow.getAttribute('data-dir'), 10);
-                        flipTile(dir);
+                        flipTile(parseInt(arrow.getAttribute('data-dir'), 10));
                     });
                 });
 
@@ -570,7 +542,6 @@
                 scene.addEventListener('touchstart', handleSwipeStart, { passive: true });
                 scene.addEventListener('touchmove', handleSwipeMove, { passive: true });
                 scene.addEventListener('touchend', handleSwipeEnd);
-
                 document.addEventListener('keydown', handleKeydown);
 
                 setInterval(() => {
