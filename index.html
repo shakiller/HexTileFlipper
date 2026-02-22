@@ -241,19 +241,14 @@
                 { dx: -40, dy: -35 }   // 5: top-left
             ];
 
-            // Уникальные треугольники: 12 штук с постоянными цветом и номером
-            const allTriangles = [];
-            for (let i = 1; i <= 12; i++) {
-                allTriangles.push({
-                    id: i,
-                    color: `hsl(${Math.random() * 360}, 80%, 60%)`,
-                    number: i
+            // Шесть треугольников с уникальными цветами и номерами 1..6
+            const triangles = [];
+            for (let i = 1; i <= 6; i++) {
+                triangles.push({
+                    number: i,
+                    color: `hsl(${Math.random() * 360}, 80%, 60%)`
                 });
             }
-
-            // Текущее распределение: на лицевой стороне первые 6, на обратной последние 6
-            let frontIndices = [0, 1, 2, 3, 4, 5];      // индексы в allTriangles
-            let backIndices = [6, 7, 8, 9, 10, 11];
 
             const state = {
                 moveCount: 0,
@@ -292,8 +287,8 @@
                 return vertices;
             }
 
-            // Рисует грань по заданному массиву индексов треугольников
-            function drawFace(faceElement, indices) {
+            // Рисует грань. Если reverse = true, треугольники рисуются в обратном порядке (для обратной стороны)
+            function drawFace(faceElement, reverse) {
                 faceElement.innerHTML = '';
 
                 const canvas = document.createElement('canvas');
@@ -307,8 +302,11 @@
 
                 const vertices = getHexVertices(centerX, centerY, radius);
 
+                // Определяем порядок треугольников
+                const order = reverse ? [5,4,3,2,1,0] : [0,1,2,3,4,5];
+
                 for (let i = 0; i < 6; i++) {
-                    const tri = allTriangles[indices[i]];
+                    const tri = triangles[order[i]];
                     const color = tri.color;
                     const number = tri.number;
                     const v1 = vertices[i];
@@ -367,10 +365,9 @@
                 faceElement.appendChild(canvas);
             }
 
-            function updateFaces() {
-                drawFace(document.getElementById('frontFace'), frontIndices);
-                drawFace(document.getElementById('backFace'), backIndices);
-            }
+            // Начальная отрисовка
+            drawFace(document.getElementById('frontFace'), false);
+            drawFace(document.getElementById('backFace'), true);
 
             function getEdgeOffset(directionIndex) {
                 const angleToEdge = (directionIndex * 60 - 60) * Math.PI / 180;
@@ -440,11 +437,11 @@
                         backFace.classList.add('front');
                         backFace.id = 'frontFace';
 
-                        // Обмениваем индексы с разворотом, чтобы симулировать переворот
-                        // Разворот даёт эффект зеркального отображения при переходе на другую сторону
-                        [frontIndices, backIndices] = [backIndices.slice().reverse(), frontIndices.slice().reverse()];
-
-                        updateFaces();
+                        // Перерисовываем грани с новыми флагами reverse
+                        // Теперь та, что стала front (бывшая back), должна рисоваться с reverse=true
+                        // А та, что стала back (бывшая front), с reverse=false
+                        drawFace(document.getElementById('frontFace'), true);
+                        drawFace(document.getElementById('backFace'), false);
 
                         // Обновляем позицию тайла
                         const offset = DIRECTION_OFFSETS[directionIndex];
@@ -555,8 +552,6 @@
             }
 
             function init() {
-                // Начальная отрисовка
-                updateFaces();
                 updateTileTransform();
 
                 document.querySelectorAll('.direction-arrow').forEach(arrow => {
