@@ -57,6 +57,7 @@
             display: flex;
             align-items: center;
             justify-content: center;
+            overflow: visible;
         }
 
         .tile-container {
@@ -64,7 +65,8 @@
             width: 200px;
             height: 230px;
             transform-style: preserve-3d;
-            transform: rotateX(55deg) scale(0.8); /* уменьшен масштаб */
+            transform: rotateX(55deg) scale(0.8);
+            transition: transform 0s; /* без перехода, обновляем сразу после анимации */
         }
 
         .tile-pivot {
@@ -211,7 +213,7 @@
     </div>
 
     <div class="info">
-        Свайпни или кликни на стрелку
+        Свайпни или кликни на стрелку – тайл перемещается
         <div class="moves-counter">Переворотов: <span id="moveCount">0</span></div>
     </div>
 
@@ -225,6 +227,19 @@
 
         const TILE_WIDTH = 200;
         const TILE_HEIGHT = 230;
+
+        // Позиция тайла в пикселях (накопленное смещение)
+        let tileX = 0, tileY = 0;
+
+        // Смещения для каждого направления (подобраны визуально)
+        const DIRECTION_OFFSETS = [
+            { dx: 40, dy: -35 },  // 0: top-right
+            { dx: 70, dy: 0 },     // 1: right
+            { dx: 40, dy: 35 },    // 2: bottom-right
+            { dx: -40, dy: 35 },   // 3: bottom-left
+            { dx: -70, dy: 0 },    // 4: left
+            { dx: -40, dy: -35 }   // 5: top-left
+        ];
 
         const state = {
             moveCount: 0,
@@ -272,7 +287,7 @@
             return vertices;
         }
 
-        // Рисует грань с заданными цветами. Если isFront = true, то цифры 1..6, иначе 6..1
+        // Рисует грань: isFront=true -> цифры 1..6 по часовой, иначе 6..1
         function drawFace(faceElement, colors, isFront) {
             faceElement.innerHTML = '';
 
@@ -311,7 +326,7 @@
                 ctx.lineWidth = 3;
                 ctx.stroke();
 
-                // Номер сектора: для передней стороны 1..6, для задней 6..1
+                // Номер сектора
                 const number = isFront ? i + 1 : 6 - i;
                 const textX = centerX + (midX - centerX) * 0.6;
                 const textY = centerY + (midY - centerY) * 0.6;
@@ -361,6 +376,12 @@
             };
         }
 
+        // Обновляет позицию контейнера с учётом накопленного смещения
+        function updateTileTransform() {
+            const container = document.getElementById('tileContainer');
+            container.style.transform = `translate(${tileX}px, ${tileY}px) rotateX(55deg) scale(0.8)`;
+        }
+
         function flipTile(directionIndex) {
             if (state.isFlipping) return;
 
@@ -400,9 +421,11 @@
                 if (progress < 1) {
                     requestAnimationFrame(animate);
                 } else {
+                    // Завершение анимации
                     state.moveCount++;
                     document.getElementById('moveCount').textContent = state.moveCount;
 
+                    // Меняем стороны местами
                     const frontFace = document.getElementById('frontFace');
                     const backFace = document.getElementById('backFace');
 
@@ -414,12 +437,19 @@
                     backFace.classList.add('front');
                     backFace.id = 'frontFace';
 
-                    // Меняем цвета местами
+                    // Меняем цвета местами (без генерации новых)
                     [state.frontColors, state.backColors] = [state.backColors, state.frontColors];
 
-                    // Перерисовываем грани с новыми цветами и правильными номерами
+                    // Перерисовываем грани
                     updateFaces();
 
+                    // Обновляем позицию тайла
+                    const offset = DIRECTION_OFFSETS[directionIndex];
+                    tileX += offset.dx;
+                    tileY += offset.dy;
+                    updateTileTransform();
+
+                    // Сбрасываем временную трансформацию пивота
                     pivot.style.transform = '';
                     hexTile.classList.remove('flipping');
 
@@ -451,6 +481,7 @@
             }
         }
 
+        // Обработка свайпов
         let touchStart = { x: 0, y: 0 };
         let isSwiping = false;
 
@@ -507,6 +538,7 @@
             }
         }
 
+        // Клавиатурная поддержка
         function handleKeydown(e) {
             if (state.isFlipping) return;
 
@@ -525,9 +557,11 @@
             state.frontColors = Array.from({ length: 6 }, () => randomColor());
             state.backColors = Array.from({ length: 6 }, () => randomColor());
 
-            // Рисуем начальные грани
             drawFace(document.getElementById('frontFace'), state.frontColors, true);
             drawFace(document.getElementById('backFace'), state.backColors, false);
+
+            // Устанавливаем начальную позицию
+            updateTileTransform();
 
             document.querySelectorAll('.direction-arrow').forEach(arrow => {
                 arrow.addEventListener('click', (e) => {
