@@ -218,404 +218,382 @@
     </div>
 
     <script>
-        if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-            document.documentElement.classList.add('dark');
-        }
-        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', event => {
-            document.documentElement.classList.toggle('dark', event.matches);
-        });
-
-        const TILE_WIDTH = 200;
-        const TILE_HEIGHT = 230;
-
-        // Позиция тайла в пикселях (накопленное смещение)
-        let tileX = 0, tileY = 0;
-
-        // Смещения для каждого направления (подобраны визуально)
-        const DIRECTION_OFFSETS = [
-            { dx: 40, dy: -35 },  // 0: top-right
-            { dx: 70, dy: 0 },     // 1: right
-            { dx: 40, dy: 35 },    // 2: bottom-right
-            { dx: -40, dy: 35 },   // 3: bottom-left
-            { dx: -70, dy: 0 },    // 4: left
-            { dx: -40, dy: -35 }   // 5: top-left
-        ];
-
-        // Состояние: два массива треугольников (каждый содержит цвет и номер)
-        const state = {
-            moveCount: 0,
-            isFlipping: false,
-            frontTriangles: [], // 6 объектов { color, number }
-            backTriangles: []
-        };
-
-        const FLIP_DIRECTIONS = [
-            { name: 'topRight', edgeAngle: 30 },
-            { name: 'right', edgeAngle: 90 },
-            { name: 'bottomRight', edgeAngle: 150 },
-            { name: 'bottomLeft', edgeAngle: -150 },
-            { name: 'left', edgeAngle: -90 },
-            { name: 'topLeft', edgeAngle: -30 }
-        ];
-
-        function randomColor() {
-            const hue = Math.random() * 360;
-            const sat = 70 + Math.random() * 30;
-            const light = 50 + Math.random() * 20;
-            return `hsl(${hue}, ${sat}%, ${light}%)`;
-        }
-
-        function darkenColor(hsl, amount) {
-            const match = hsl.match(/hsl\(([\d.]+),\s*([\d.]+)%,\s*([\d.]+)%\)/);
-            if (match) {
-                const h = parseFloat(match[1]);
-                const s = parseFloat(match[2]);
-                const l = Math.max(0, Math.min(100, parseFloat(match[3]) + amount));
-                return `hsl(${h}, ${s}%, ${l}%)`;
+        (function() {
+            if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+                document.documentElement.classList.add('dark');
             }
-            return hsl;
-        }
-
-        function getHexVertices(centerX, centerY, radius) {
-            const vertices = [];
-            for (let i = 0; i < 6; i++) {
-                const angle = (i * 60 - 90) * Math.PI / 180;
-                vertices.push({
-                    x: centerX + radius * Math.cos(angle),
-                    y: centerY + radius * Math.sin(angle)
-                });
-            }
-            return vertices;
-        }
-
-        // Рисует грань на основе массива треугольников
-        function drawFace(faceElement, triangles) {
-            faceElement.innerHTML = '';
-
-            const canvas = document.createElement('canvas');
-            canvas.width = 400;
-            canvas.height = 460;
-
-            const ctx = canvas.getContext('2d');
-            const centerX = 200;
-            const centerY = 230;
-            const radius = 190;
-
-            const vertices = getHexVertices(centerX, centerY, radius);
-
-            for (let i = 0; i < 6; i++) {
-                const triangle = triangles[i];
-                const color = triangle.color;
-                const number = triangle.number;
-                const v1 = vertices[i];
-                const v2 = vertices[(i + 1) % 6];
-
-                ctx.beginPath();
-                ctx.moveTo(centerX, centerY);
-                ctx.lineTo(v1.x, v1.y);
-                ctx.lineTo(v2.x, v2.y);
-                ctx.closePath();
-
-                const midX = (v1.x + v2.x) / 2;
-                const midY = (v1.y + v2.y) / 2;
-                const gradient = ctx.createLinearGradient(centerX, centerY, midX, midY);
-                gradient.addColorStop(0, darkenColor(color, 15));
-                gradient.addColorStop(1, color);
-
-                ctx.fillStyle = gradient;
-                ctx.fill();
-
-                ctx.strokeStyle = 'rgba(255,255,255,0.3)';
-                ctx.lineWidth = 3;
-                ctx.stroke();
-
-                const textX = centerX + (midX - centerX) * 0.6;
-                const textY = centerY + (midY - centerY) * 0.6;
-
-                ctx.font = 'bold 28px "Orbitron", sans-serif';
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'middle';
-                ctx.shadowColor = '#000';
-                ctx.shadowBlur = 8;
-                ctx.fillStyle = 'white';
-                ctx.fillText(number, textX, textY);
-                ctx.shadowBlur = 0;
-            }
-
-            ctx.beginPath();
-            ctx.moveTo(vertices[0].x, vertices[0].y);
-            for (let i = 1; i < 6; i++) {
-                ctx.lineTo(vertices[i].x, vertices[i].y);
-            }
-            ctx.closePath();
-            ctx.strokeStyle = 'rgba(255,255,255,0.6)';
-            ctx.lineWidth = 5;
-            ctx.stroke();
-
-            ctx.beginPath();
-            ctx.arc(centerX, centerY, 15, 0, Math.PI * 2);
-            const centerGrad = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, 15);
-            centerGrad.addColorStop(0, 'rgba(255,255,255,0.7)');
-            centerGrad.addColorStop(1, 'rgba(255,255,255,0.2)');
-            ctx.fillStyle = centerGrad;
-            ctx.fill();
-
-            faceElement.appendChild(canvas);
-        }
-
-        function updateFaces() {
-            drawFace(document.getElementById('frontFace'), state.frontTriangles);
-            drawFace(document.getElementById('backFace'), state.backTriangles);
-        }
-
-        function getEdgeOffset(directionIndex) {
-            const angleToEdge = (directionIndex * 60 - 60) * Math.PI / 180;
-            const edgeDistance = TILE_HEIGHT / 2 * 0.8;
-            return {
-                x: Math.cos(angleToEdge) * edgeDistance,
-                y: Math.sin(angleToEdge) * edgeDistance
-            };
-        }
-
-        // Обновляет позицию контейнера с учётом накопленного смещения
-        function updateTileTransform() {
-            const container = document.getElementById('tileContainer');
-            container.style.transform = `translate(${tileX}px, ${tileY}px) rotateX(55deg) scale(0.8)`;
-        }
-
-        function flipTile(directionIndex) {
-            if (state.isFlipping) return;
-
-            const direction = FLIP_DIRECTIONS[directionIndex];
-            state.isFlipping = true;
-
-            const pivot = document.getElementById('tilePivot');
-            const hexTile = document.getElementById('hexTile');
-
-            hexTile.classList.add('flipping');
-
-            const edge = getEdgeOffset(directionIndex);
-
-            const edgeAxisAngle = direction.edgeAngle * Math.PI / 180;
-            const axisX = Math.cos(edgeAxisAngle);
-            const axisY = Math.sin(edgeAxisAngle);
-
-            let startTime = null;
-            const duration = 500;
-
-            function animate(timestamp) {
-                if (!startTime) startTime = timestamp;
-                const progress = Math.min((timestamp - startTime) / duration, 1);
-
-                const eased = progress < 0.5
-                    ? 2 * progress * progress
-                    : 1 - Math.pow(-2 * progress + 2, 2) / 2;
-
-                const rotationDeg = eased * 180;
-
-                pivot.style.transform = `
-                    translate3d(${edge.x}px, ${edge.y}px, 0)
-                    rotate3d(${axisX}, ${axisY}, 0, ${rotationDeg}deg)
-                    translate3d(${-edge.x}px, ${-edge.y}px, 0)
-                `;
-
-                if (progress < 1) {
-                    requestAnimationFrame(animate);
-                } else {
-                    // Завершение анимации
-                    state.moveCount++;
-                    document.getElementById('moveCount').textContent = state.moveCount;
-
-                    // Меняем стороны местами
-                    const frontFace = document.getElementById('frontFace');
-                    const backFace = document.getElementById('backFace');
-
-                    frontFace.classList.remove('front');
-                    frontFace.classList.add('back');
-                    frontFace.id = 'backFace';
-
-                    backFace.classList.remove('back');
-                    backFace.classList.add('front');
-                    backFace.id = 'frontFace';
-
-                    // Обмениваем треугольники с разворотом, чтобы симулировать переворот
-                    // Разворот нужен, потому что обратная сторона отображается зеркально
-                    [state.frontTriangles, state.backTriangles] = [
-                        state.backTriangles.slice().reverse(),
-                        state.frontTriangles.slice().reverse()
-                    ];
-
-                    // Перерисовываем грани
-                    updateFaces();
-
-                    // Обновляем позицию тайла
-                    const offset = DIRECTION_OFFSETS[directionIndex];
-                    tileX += offset.dx;
-                    tileY += offset.dy;
-                    updateTileTransform();
-
-                    // Сбрасываем временную трансформацию пивота
-                    pivot.style.transform = '';
-                    hexTile.classList.remove('flipping');
-
-                    createParticles();
-
-                    state.isFlipping = false;
-                }
-            }
-
-            requestAnimationFrame(animate);
-        }
-
-        function createParticles() {
-            const container = document.getElementById('particles');
-            const rect = document.getElementById('scene').getBoundingClientRect();
-            const centerX = rect.left + rect.width / 2;
-            const centerY = rect.top + rect.height / 2;
-
-            for (let i = 0; i < 8; i++) {
-                const particle = document.createElement('div');
-                particle.className = 'particle';
-                particle.style.left = `${centerX + (Math.random() - 0.5) * 150}px`;
-                particle.style.top = `${centerY + (Math.random() - 0.5) * 150}px`;
-                particle.style.animation = `float ${2 + Math.random() * 2}s ease-out forwards`;
-                particle.style.animationDelay = `${Math.random() * 0.2}s`;
-
-                container.appendChild(particle);
-                setTimeout(() => particle.remove(), 4000);
-            }
-        }
-
-        // Обработка свайпов
-        let touchStart = { x: 0, y: 0 };
-        let isSwiping = false;
-
-        function getSwipeDirection(dx, dy) {
-            const angle = Math.atan2(dy, dx) * 180 / Math.PI;
-            const normalizedAngle = ((angle + 360) % 360);
-
-            if (normalizedAngle >= 330 || normalizedAngle < 30) return 1;
-            if (normalizedAngle >= 30 && normalizedAngle < 90) return 2;
-            if (normalizedAngle >= 90 && normalizedAngle < 150) return 3;
-            if (normalizedAngle >= 150 && normalizedAngle < 210) return 4;
-            if (normalizedAngle >= 210 && normalizedAngle < 270) return 5;
-            return 0;
-        }
-
-        function handleSwipeStart(e) {
-            if (state.isFlipping) return;
-            const point = e.touches ? e.touches[0] : e;
-            touchStart = { x: point.clientX, y: point.clientY };
-            isSwiping = true;
-        }
-
-        function handleSwipeMove(e) {
-            if (!isSwiping || state.isFlipping) return;
-
-            const point = e.touches ? e.touches[0] : e;
-            const dx = point.clientX - touchStart.x;
-            const dy = point.clientY - touchStart.y;
-            const distance = Math.sqrt(dx * dx + dy * dy);
-
-            const arrows = document.querySelectorAll('.direction-arrow');
-            arrows.forEach(arrow => arrow.classList.remove('active'));
-
-            if (distance > 20) {
-                const dir = getSwipeDirection(dx, dy);
-                arrows[dir].classList.add('active');
-            }
-        }
-
-        function handleSwipeEnd(e) {
-            if (!isSwiping || state.isFlipping) return;
-            isSwiping = false;
-
-            const point = e.changedTouches ? e.changedTouches[0] : e;
-            const dx = point.clientX - touchStart.x;
-            const dy = point.clientY - touchStart.y;
-            const distance = Math.sqrt(dx * dx + dy * dy);
-
-            document.querySelectorAll('.direction-arrow').forEach(a => a.classList.remove('active'));
-
-            if (distance > 40) {
-                const direction = getSwipeDirection(dx, dy);
-                flipTile(direction);
-            }
-        }
-
-        // Клавиатурная поддержка
-        function handleKeydown(e) {
-            if (state.isFlipping) return;
-
-            const keyMap = {
-                'KeyE': 0, 'KeyD': 1, 'KeyC': 2, 'KeyZ': 3, 'KeyA': 4, 'KeyQ': 5,
-                'ArrowRight': 1, 'ArrowLeft': 4
-            };
-
-            if (keyMap.hasOwnProperty(e.code)) {
-                e.preventDefault();
-                flipTile(keyMap[e.code]);
-            }
-        }
-
-        function init() {
-            // Создаём треугольники для лицевой стороны с номерами 1..6
-            state.frontTriangles = [];
-            for (let i = 0; i < 6; i++) {
-                state.frontTriangles.push({
-                    color: randomColor(),
-                    number: i + 1
-                });
-            }
-            // Для тыльной стороны тоже номера 1..6, но они будут видны только после переворота
-            state.backTriangles = [];
-            for (let i = 0; i < 6; i++) {
-                state.backTriangles.push({
-                    color: randomColor(),
-                    number: i + 1
-                });
-            }
-
-            drawFace(document.getElementById('frontFace'), state.frontTriangles);
-            drawFace(document.getElementById('backFace'), state.backTriangles);
-
-            // Устанавливаем начальную позицию
-            updateTileTransform();
-
-            document.querySelectorAll('.direction-arrow').forEach(arrow => {
-                arrow.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    const dir = parseInt(arrow.getAttribute('data-dir'), 10);
-                    flipTile(dir);
-                });
+            window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', e => {
+                document.documentElement.classList.toggle('dark', e.matches);
             });
 
-            const scene = document.getElementById('scene');
-            scene.addEventListener('mousedown', handleSwipeStart);
-            scene.addEventListener('mousemove', handleSwipeMove);
-            scene.addEventListener('mouseup', handleSwipeEnd);
-            scene.addEventListener('mouseleave', handleSwipeEnd);
-            scene.addEventListener('touchstart', handleSwipeStart, { passive: true });
-            scene.addEventListener('touchmove', handleSwipeMove, { passive: true });
-            scene.addEventListener('touchend', handleSwipeEnd);
+            const TILE_WIDTH = 200;
+            const TILE_HEIGHT = 230;
 
-            document.addEventListener('keydown', handleKeydown);
+            // Позиция тайла в пикселях (накопленное смещение)
+            let tileX = 0, tileY = 0;
 
-            setInterval(() => {
-                if (Math.random() > 0.8) {
-                    const container = document.getElementById('particles');
+            const DIRECTION_OFFSETS = [
+                { dx: 40, dy: -35 },  // 0: top-right
+                { dx: 70, dy: 0 },     // 1: right
+                { dx: 40, dy: 35 },    // 2: bottom-right
+                { dx: -40, dy: 35 },   // 3: bottom-left
+                { dx: -70, dy: 0 },    // 4: left
+                { dx: -40, dy: -35 }   // 5: top-left
+            ];
+
+            // Уникальные треугольники: 12 штук с постоянными цветом и номером
+            const allTriangles = [];
+            for (let i = 1; i <= 12; i++) {
+                allTriangles.push({
+                    id: i,
+                    color: `hsl(${Math.random() * 360}, 80%, 60%)`,
+                    number: i
+                });
+            }
+
+            // Текущее распределение: на лицевой стороне первые 6, на обратной последние 6
+            let frontIndices = [0, 1, 2, 3, 4, 5];      // индексы в allTriangles
+            let backIndices = [6, 7, 8, 9, 10, 11];
+
+            const state = {
+                moveCount: 0,
+                isFlipping: false
+            };
+
+            const FLIP_DIRECTIONS = [
+                { name: 'topRight', edgeAngle: 30 },
+                { name: 'right', edgeAngle: 90 },
+                { name: 'bottomRight', edgeAngle: 150 },
+                { name: 'bottomLeft', edgeAngle: -150 },
+                { name: 'left', edgeAngle: -90 },
+                { name: 'topLeft', edgeAngle: -30 }
+            ];
+
+            function darkenColor(hsl, amount) {
+                const match = hsl.match(/hsl\(([\d.]+),\s*([\d.]+)%,\s*([\d.]+)%\)/);
+                if (match) {
+                    const h = parseFloat(match[1]);
+                    const s = parseFloat(match[2]);
+                    const l = Math.max(0, Math.min(100, parseFloat(match[3]) + amount));
+                    return `hsl(${h}, ${s}%, ${l}%)`;
+                }
+                return hsl;
+            }
+
+            function getHexVertices(centerX, centerY, radius) {
+                const vertices = [];
+                for (let i = 0; i < 6; i++) {
+                    const angle = (i * 60 - 90) * Math.PI / 180;
+                    vertices.push({
+                        x: centerX + radius * Math.cos(angle),
+                        y: centerY + radius * Math.sin(angle)
+                    });
+                }
+                return vertices;
+            }
+
+            // Рисует грань по заданному массиву индексов треугольников
+            function drawFace(faceElement, indices) {
+                faceElement.innerHTML = '';
+
+                const canvas = document.createElement('canvas');
+                canvas.width = 400;
+                canvas.height = 460;
+
+                const ctx = canvas.getContext('2d');
+                const centerX = 200;
+                const centerY = 230;
+                const radius = 190;
+
+                const vertices = getHexVertices(centerX, centerY, radius);
+
+                for (let i = 0; i < 6; i++) {
+                    const tri = allTriangles[indices[i]];
+                    const color = tri.color;
+                    const number = tri.number;
+                    const v1 = vertices[i];
+                    const v2 = vertices[(i + 1) % 6];
+
+                    ctx.beginPath();
+                    ctx.moveTo(centerX, centerY);
+                    ctx.lineTo(v1.x, v1.y);
+                    ctx.lineTo(v2.x, v2.y);
+                    ctx.closePath();
+
+                    const midX = (v1.x + v2.x) / 2;
+                    const midY = (v1.y + v2.y) / 2;
+                    const gradient = ctx.createLinearGradient(centerX, centerY, midX, midY);
+                    gradient.addColorStop(0, darkenColor(color, 15));
+                    gradient.addColorStop(1, color);
+
+                    ctx.fillStyle = gradient;
+                    ctx.fill();
+
+                    ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+                    ctx.lineWidth = 3;
+                    ctx.stroke();
+
+                    const textX = centerX + (midX - centerX) * 0.6;
+                    const textY = centerY + (midY - centerY) * 0.6;
+
+                    ctx.font = 'bold 28px "Orbitron", sans-serif';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.shadowColor = '#000';
+                    ctx.shadowBlur = 8;
+                    ctx.fillStyle = 'white';
+                    ctx.fillText(number, textX, textY);
+                    ctx.shadowBlur = 0;
+                }
+
+                ctx.beginPath();
+                ctx.moveTo(vertices[0].x, vertices[0].y);
+                for (let i = 1; i < 6; i++) {
+                    ctx.lineTo(vertices[i].x, vertices[i].y);
+                }
+                ctx.closePath();
+                ctx.strokeStyle = 'rgba(255,255,255,0.6)';
+                ctx.lineWidth = 5;
+                ctx.stroke();
+
+                ctx.beginPath();
+                ctx.arc(centerX, centerY, 15, 0, Math.PI * 2);
+                const centerGrad = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, 15);
+                centerGrad.addColorStop(0, 'rgba(255,255,255,0.7)');
+                centerGrad.addColorStop(1, 'rgba(255,255,255,0.2)');
+                ctx.fillStyle = centerGrad;
+                ctx.fill();
+
+                faceElement.appendChild(canvas);
+            }
+
+            function updateFaces() {
+                drawFace(document.getElementById('frontFace'), frontIndices);
+                drawFace(document.getElementById('backFace'), backIndices);
+            }
+
+            function getEdgeOffset(directionIndex) {
+                const angleToEdge = (directionIndex * 60 - 60) * Math.PI / 180;
+                const edgeDistance = TILE_HEIGHT / 2 * 0.8;
+                return {
+                    x: Math.cos(angleToEdge) * edgeDistance,
+                    y: Math.sin(angleToEdge) * edgeDistance
+                };
+            }
+
+            function updateTileTransform() {
+                const container = document.getElementById('tileContainer');
+                container.style.transform = `translate(${tileX}px, ${tileY}px) rotateX(55deg) scale(0.8)`;
+            }
+
+            function flipTile(directionIndex) {
+                if (state.isFlipping) return;
+
+                const direction = FLIP_DIRECTIONS[directionIndex];
+                state.isFlipping = true;
+
+                const pivot = document.getElementById('tilePivot');
+                const hexTile = document.getElementById('hexTile');
+
+                hexTile.classList.add('flipping');
+
+                const edge = getEdgeOffset(directionIndex);
+
+                const edgeAxisAngle = direction.edgeAngle * Math.PI / 180;
+                const axisX = Math.cos(edgeAxisAngle);
+                const axisY = Math.sin(edgeAxisAngle);
+
+                let startTime = null;
+                const duration = 500;
+
+                function animate(timestamp) {
+                    if (!startTime) startTime = timestamp;
+                    const progress = Math.min((timestamp - startTime) / duration, 1);
+
+                    const eased = progress < 0.5
+                        ? 2 * progress * progress
+                        : 1 - Math.pow(-2 * progress + 2, 2) / 2;
+
+                    const rotationDeg = eased * 180;
+
+                    pivot.style.transform = `
+                        translate3d(${edge.x}px, ${edge.y}px, 0)
+                        rotate3d(${axisX}, ${axisY}, 0, ${rotationDeg}deg)
+                        translate3d(${-edge.x}px, ${-edge.y}px, 0)
+                    `;
+
+                    if (progress < 1) {
+                        requestAnimationFrame(animate);
+                    } else {
+                        state.moveCount++;
+                        document.getElementById('moveCount').textContent = state.moveCount;
+
+                        // Меняем стороны местами
+                        const frontFace = document.getElementById('frontFace');
+                        const backFace = document.getElementById('backFace');
+
+                        frontFace.classList.remove('front');
+                        frontFace.classList.add('back');
+                        frontFace.id = 'backFace';
+
+                        backFace.classList.remove('back');
+                        backFace.classList.add('front');
+                        backFace.id = 'frontFace';
+
+                        // Обмениваем индексы с разворотом, чтобы симулировать переворот
+                        // Разворот даёт эффект зеркального отображения при переходе на другую сторону
+                        [frontIndices, backIndices] = [backIndices.slice().reverse(), frontIndices.slice().reverse()];
+
+                        updateFaces();
+
+                        // Обновляем позицию тайла
+                        const offset = DIRECTION_OFFSETS[directionIndex];
+                        tileX += offset.dx;
+                        tileY += offset.dy;
+                        updateTileTransform();
+
+                        pivot.style.transform = '';
+                        hexTile.classList.remove('flipping');
+
+                        createParticles();
+
+                        state.isFlipping = false;
+                    }
+                }
+
+                requestAnimationFrame(animate);
+            }
+
+            function createParticles() {
+                const container = document.getElementById('particles');
+                const rect = document.getElementById('scene').getBoundingClientRect();
+                const centerX = rect.left + rect.width / 2;
+                const centerY = rect.top + rect.height / 2;
+
+                for (let i = 0; i < 8; i++) {
                     const particle = document.createElement('div');
                     particle.className = 'particle';
-                    particle.style.left = `${Math.random() * 100}%`;
-                    particle.style.top = '100%';
-                    particle.style.animation = `float ${5 + Math.random() * 5}s linear forwards`;
-                    container.appendChild(particle);
-                    setTimeout(() => particle.remove(), 10000);
-                }
-            }, 500);
-        }
+                    particle.style.left = `${centerX + (Math.random() - 0.5) * 150}px`;
+                    particle.style.top = `${centerY + (Math.random() - 0.5) * 150}px`;
+                    particle.style.animation = `float ${2 + Math.random() * 2}s ease-out forwards`;
+                    particle.style.animationDelay = `${Math.random() * 0.2}s`;
 
-        init();
+                    container.appendChild(particle);
+                    setTimeout(() => particle.remove(), 4000);
+                }
+            }
+
+            // Обработка свайпов
+            let touchStart = { x: 0, y: 0 };
+            let isSwiping = false;
+
+            function getSwipeDirection(dx, dy) {
+                const angle = Math.atan2(dy, dx) * 180 / Math.PI;
+                const normalizedAngle = ((angle + 360) % 360);
+
+                if (normalizedAngle >= 330 || normalizedAngle < 30) return 1;
+                if (normalizedAngle >= 30 && normalizedAngle < 90) return 2;
+                if (normalizedAngle >= 90 && normalizedAngle < 150) return 3;
+                if (normalizedAngle >= 150 && normalizedAngle < 210) return 4;
+                if (normalizedAngle >= 210 && normalizedAngle < 270) return 5;
+                return 0;
+            }
+
+            function handleSwipeStart(e) {
+                if (state.isFlipping) return;
+                const point = e.touches ? e.touches[0] : e;
+                touchStart = { x: point.clientX, y: point.clientY };
+                isSwiping = true;
+            }
+
+            function handleSwipeMove(e) {
+                if (!isSwiping || state.isFlipping) return;
+
+                const point = e.touches ? e.touches[0] : e;
+                const dx = point.clientX - touchStart.x;
+                const dy = point.clientY - touchStart.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+
+                const arrows = document.querySelectorAll('.direction-arrow');
+                arrows.forEach(arrow => arrow.classList.remove('active'));
+
+                if (distance > 20) {
+                    const dir = getSwipeDirection(dx, dy);
+                    arrows[dir].classList.add('active');
+                }
+            }
+
+            function handleSwipeEnd(e) {
+                if (!isSwiping || state.isFlipping) return;
+                isSwiping = false;
+
+                const point = e.changedTouches ? e.changedTouches[0] : e;
+                const dx = point.clientX - touchStart.x;
+                const dy = point.clientY - touchStart.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+
+                document.querySelectorAll('.direction-arrow').forEach(a => a.classList.remove('active'));
+
+                if (distance > 40) {
+                    const direction = getSwipeDirection(dx, dy);
+                    flipTile(direction);
+                }
+            }
+
+            function handleKeydown(e) {
+                if (state.isFlipping) return;
+
+                const keyMap = {
+                    'KeyE': 0, 'KeyD': 1, 'KeyC': 2, 'KeyZ': 3, 'KeyA': 4, 'KeyQ': 5,
+                    'ArrowRight': 1, 'ArrowLeft': 4
+                };
+
+                if (keyMap.hasOwnProperty(e.code)) {
+                    e.preventDefault();
+                    flipTile(keyMap[e.code]);
+                }
+            }
+
+            function init() {
+                // Начальная отрисовка
+                updateFaces();
+                updateTileTransform();
+
+                document.querySelectorAll('.direction-arrow').forEach(arrow => {
+                    arrow.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        const dir = parseInt(arrow.getAttribute('data-dir'), 10);
+                        flipTile(dir);
+                    });
+                });
+
+                const scene = document.getElementById('scene');
+                scene.addEventListener('mousedown', handleSwipeStart);
+                scene.addEventListener('mousemove', handleSwipeMove);
+                scene.addEventListener('mouseup', handleSwipeEnd);
+                scene.addEventListener('mouseleave', handleSwipeEnd);
+                scene.addEventListener('touchstart', handleSwipeStart, { passive: true });
+                scene.addEventListener('touchmove', handleSwipeMove, { passive: true });
+                scene.addEventListener('touchend', handleSwipeEnd);
+
+                document.addEventListener('keydown', handleKeydown);
+
+                setInterval(() => {
+                    if (Math.random() > 0.8) {
+                        const container = document.getElementById('particles');
+                        const particle = document.createElement('div');
+                        particle.className = 'particle';
+                        particle.style.left = `${Math.random() * 100}%`;
+                        particle.style.top = '100%';
+                        particle.style.animation = `float ${5 + Math.random() * 5}s linear forwards`;
+                        container.appendChild(particle);
+                        setTimeout(() => particle.remove(), 10000);
+                    }
+                }, 500);
+            }
+
+            init();
+        })();
     </script>
 </body>
 </html>
